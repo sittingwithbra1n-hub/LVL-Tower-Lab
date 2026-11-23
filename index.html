@@ -1,0 +1,46 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<style>html,body{margin:0;padding:0;overflow:hidden;font-family:system-ui,sans-serif;background:transparent}#chart{height:626px;width:100%;outline:none}#tip{font-size:12px;color:#929aa3;margin:0 4px;height:24px}*{box-sizing:border-box}</style>
+<script src="plotly.min.js"></script></head><body><div id="chart" tabindex="0"></div><div id="tip">Нажми на стержень, чтобы выбрать КЭ. Esc снимает выбор. Для поворота модели потяни мышью.</div>
+<script>
+(function(){
+ const chart=document.getElementById('chart');
+ function send(type,data={}){window.parent.postMessage({isStreamlitMessage:true,type,...data},'*')}
+ let seq=0,rendered=false;
+ function notify(value){seq++;send('streamlit:setComponentValue',{value:{...value,nonce:Date.now()*1000+seq}})}
+ function onKey(e){
+   if(e.key==='Escape' || e.key==='Esc'){
+     e.preventDefault();e.stopPropagation();
+     notify({action:'clear'});
+   }
+ }
+ // The iframe receives keyboard input after its chart gets focus.
+ document.addEventListener('keydown',onKey,true);
+ chart.addEventListener('pointerdown',()=>{try{chart.focus({preventScroll:true})}catch(_){chart.focus()}});
+ chart.addEventListener('pointerenter',()=>{try{chart.focus({preventScroll:true})}catch(_){}});
+ // If the browser permits same-origin parent access, Esc also works outside the chart.
+ try{ if(window.parent && window.parent!==window && window.parent.location.origin===window.location.origin){
+   window.parent.document.addEventListener('keydown',onKey,true);
+ }}catch(_){/* iframe remains self-contained in cross-origin deployments */}
+ function render(args){
+  const fig=JSON.parse(args.figure_json);
+  const config={displayModeBar:true,responsive:true,displaylogo:false,scrollZoom:true};
+  const op=rendered?Plotly.react(chart,fig.data,fig.layout,config):Plotly.newPlot(chart,fig.data,fig.layout,config);
+  rendered=true;
+  op.then(()=>{
+    chart.removeAllListeners('plotly_click');
+    chart.on('plotly_click',e=>{
+      const p=(e.points||[]).find(q=>Number.isInteger(Number(q.customdata))&&Number(q.customdata)>0);
+      if(!p)return;
+      notify({action:'select',element:Number(p.customdata)});
+    });
+    send('streamlit:setFrameHeight',{height:652});
+  });
+ }
+ window.addEventListener('message',e=>{
+  if(!e.data||e.data.type!=='streamlit:render')return;
+  try{render(e.data.args||{})}catch(err){document.getElementById('tip').textContent='Ошибка отображения 3D: '+err.message}
+ });
+ send('streamlit:componentReady',{apiVersion:1});
+ send('streamlit:setFrameHeight',{height:652});
+})();
+</script></body></html>
